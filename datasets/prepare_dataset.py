@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import json
 import tensorflow as tf
-from scipy.misc import imresize
+from PIL import Image
 
 
 class SceneChangeDetector:
@@ -121,7 +121,7 @@ def process_video(video_path, scd, writer, args):
                 lr_h = frames[k].shape[0] // args.scale_factor
                 lr_w = frames[k].shape[1] // args.scale_factor
                 frames[k] = frames[k][:lr_h * args.scale_factor, :lr_w * args.scale_factor]
-                frame_lr = imresize(frames[k], (lr_h, lr_w), interp='bicubic')
+                frame_lr = np.array(Image.fromarray(frames[k]).resize((lr_h, lr_w), resample=Image.BICUBIC))
                 if args.blur:
                     frame_lr = cv2.GaussianBlur(frame_lr, (args.blur_size, args.blur_size), args.blur_sigma,
                                                 borderType=cv2.BORDER_REFLECT_101)
