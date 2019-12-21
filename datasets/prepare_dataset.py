@@ -6,6 +6,9 @@ import numpy as np
 import json
 import tensorflow as tf
 from PIL import Image
+from scenedetect.video_manager import VideoManager
+from scenedetect.scene_manager import SceneManager
+from scenedetect.detectors import ContentDetector
 
 
 class SceneChangeDetector:
@@ -21,53 +24,19 @@ class SceneChangeDetector:
 
     def detect_scene_changes(self):
         print("Detecting scene changes")
-        for i in tqdm(range(len(self.videos_list)), total=len(self.videos_list), unit='video'):
+        for i in range(len(self.videos_list)):
             video_fn = self.videos_list[i]
-            video = cv2.VideoCapture(video_fn)
-            if not video.isOpened():
-                print('Can not open ', video_fn, '.')
-                continue
-            frames_number = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-            width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            dif = []
-            for j in range(frames_number):
-                print('Calculating histogram differences for ',  os.path.split(video_fn)[-1], '. Frame: ', j, end='\r')
-                ret, frame = video.read()
-                frame_br = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                cur_hist = [[np.histogram(frame_br[y * self.hist_block_size:(y + 1) * self.hist_block_size,
-                                                   x * self.hist_block_size:(x + 1) * self.hist_block_size],
-                                          bins=self.hist_nbins,
-                                          range=(0.0, 255.0))[0] for x in range(width // self.hist_block_size)]
-                            for y in range(height // self.hist_block_size)]
-                if j == 0:
-                    hist_diff = [[0 for _ in range(width // self.hist_block_size)]
-                                 for _ in range(height // self.hist_block_size)]
-                else:
-                    hist_diff = [[np.fabs(np.convolve(cur_hist[y][x] - prev_hist[y][x], self.filtering_kernel, 'same'))
-                                  for x in range(width // self.hist_block_size)]
-                                 for y in range(height // self.hist_block_size)]
-                dif.append(np.sum(hist_diff) /
-                           (1024 * (width // self.hist_block_size) * (height // self.hist_block_size)))
-                prev_hist = cur_hist
-
-            scene_changes = [0]
-            for j in range(frames_number):
-                indices = [max(0, j - 3), max(0, j - 2), max(0, j - 1), min(frames_number - 1, j + 1),
-                           min(frames_number - 1, j + 2), min(frames_number - 1, j + 3)]
-                dis = 6 * dif[j] - dif[indices[0]] - dif[indices[1]] - dif[indices[2]] - dif[indices[3]] - \
-                      dif[indices[4]] - dif[indices[5]]
-                if dis > self.dis_thr and dif[j] > self.diff_thr:
-                    scene_changes.append(j - 1)
-
-            scene_changes = [scene_changes[i] for i in range(1, len(scene_changes))
-                             if scene_changes[i] - scene_changes[i - 1] > self.scene_min_frames]
-
-            if len(scene_changes) == 0 or frames_number - 1 - scene_changes[-1] > self.scene_min_frames:
-                scene_changes.append(frames_number - 1)
-            else:
-                scene_changes[-1] = frames_number - 1
-
+            print('Calculating content differences for ',  os.path.split(video_fn)[-1])
+            video_manager = VideoManager([video_fn])
+            scene_manager = SceneManager()
+            scene_manager.add_detector(ContentDetector())
+            base_timecode = video_manager.get_base_timecode()
+            video_manager.set_duration()
+            video_manager.set_downscale_factor()
+            video_manager.start()
+            scene_manager.detect_scenes(frame_source=video_manager)
+            cut_list = scene_manager.get_cut_list(base_timecode)
+            scene_changes = [cut.get_frames() for cut in cut_list]
             self.scene_changes[os.path.split(video_fn)[-1]] = scene_changes
 
     def save_scene_changes(self, filename):
