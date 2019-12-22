@@ -26,18 +26,24 @@ class SceneChangeDetector:
         print("Detecting scene changes")
         for i in range(len(self.videos_list)):
             video_fn = self.videos_list[i]
-            print('Calculating content differences for ',  os.path.split(video_fn)[-1])
-            video_manager = VideoManager([video_fn])
-            scene_manager = SceneManager()
-            scene_manager.add_detector(ContentDetector())
-            base_timecode = video_manager.get_base_timecode()
-            video_manager.set_duration()
-            video_manager.set_downscale_factor()
-            video_manager.start()
-            scene_manager.detect_scenes(frame_source=video_manager)
-            cut_list = scene_manager.get_cut_list(base_timecode)
-            scene_changes = [cut.get_frames() for cut in cut_list]
-            self.scene_changes[os.path.split(video_fn)[-1]] = scene_changes
+            print('Calculating content differences for',  os.path.split(video_fn)[-1])
+            try:
+                video_manager = VideoManager([video_fn])
+            except:
+                continue
+            try:
+                scene_manager = SceneManager()
+                scene_manager.add_detector(ContentDetector())
+                base_timecode = video_manager.get_base_timecode()
+                video_manager.set_duration()
+                video_manager.set_downscale_factor()
+                video_manager.start()
+                scene_manager.detect_scenes(frame_source=video_manager)
+                cut_list = scene_manager.get_cut_list(base_timecode)
+                scene_changes = [cut.get_frames() for cut in cut_list]
+                self.scene_changes[os.path.split(video_fn)[-1]] = scene_changes
+            finally:
+                video_manager.release()
 
     def save_scene_changes(self, filename):
         with open(filename, 'w') as json_file:
